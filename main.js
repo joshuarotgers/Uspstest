@@ -1,30 +1,34 @@
 let db;
+let routePoints = [];
+let editMode = false;
 
 window.onload = () => {
-  const request = indexedDB.open("USPSNavDB", 2);
+  const request = indexedDB.open("USPSNavDB", 3);
   request.onupgradeneeded = e => {
     db = e.target.result;
     if (!db.objectStoreNames.contains("routes"))
       db.createObjectStore("routes", { keyPath: "timestamp" });
-    if (!db.objectStoreNames.contains("packages"))
-      db.createObjectStore("packages", { keyPath: "id" });
-    if (!db.objectStoreNames.contains("poBoxes"))
-      db.createObjectStore("poBoxes", { keyPath: "id", autoIncrement: true });
-    if (!db.objectStoreNames.contains("hazards"))
-      db.createObjectStore("hazards", { keyPath: "id", autoIncrement: true });
   };
   request.onsuccess = e => {
     db = e.target.result;
     console.log("Database Ready");
-    drawRoute();
   };
   request.onerror = e => console.error("DB Error", e);
 
   document.getElementById("startRouteBtn").addEventListener("click", startRoute);
   document.getElementById("scanPackagesBtn").addEventListener("click", scanPackages);
-  document.getElementById("poBoxAdminBtn").addEventListener("click", poBoxAdmin);
-  document.getElementById("hazardLogBtn").addEventListener("click", hazardLog);
+  document.getElementById("poBoxAdminBtn").addEventListener("click", () => alert("PO Box Admin — Future Build"));
+  document.getElementById("hazardLogBtn").addEventListener("click", () => alert("Hazard Log — Future Build"));
   document.getElementById("exportDataBtn").addEventListener("click", exportAllData);
+  document.getElementById("importDataBtn").addEventListener("click", () => document.getElementById("fileInput").click());
+  document.getElementById("fileInput").addEventListener("change", importRouteFile);
+  document.getElementById("supervisorBtn").addEventListener("click", supervisorDashboard);
+  document.getElementById("replayRouteBtn").addEventListener("click", replayRoute);
+  document.getElementById("editRouteBtn").addEventListener("click", () => { editMode = !editMode; alert(editMode ? "Edit Mode ON" : "Edit Mode OFF"); });
+  document.getElementById("saveRouteBtn").addEventListener("click", saveCorrectedRoute);
+  document.getElementById("mapCanvas").addEventListener("click", mapClickHandler);
+  document.getElementById("startDeliveryBtn").addEventListener("click", startDeliveryMode);
+  document.getElementById("deliveryReportBtn").addEventListener("click", generateDailyReport);
 };
 
 function startRoute() {
@@ -36,105 +40,144 @@ function startRoute() {
 
   navigator.geolocation.watchPosition(pos => {
     const point = {
+      timestamp: Date.now(),
       lat: pos.coords.latitude,
       lon: pos.coords.longitude,
-      timestamp: Date.now()
+      packages: []
     };
     const tx = db.transaction("routes", "readwrite");
     tx.objectStore("routes").put(point);
-    drawPoint(point);
+    routePoints.push(point);
+    drawRouteCanvas();
   });
 }
 
 function scanPackages() {
+  if (routePoints.length === 0) {
+    alert("Start route first.");
+    return;
+  }
   const pkgId = prompt("Enter Package ID:");
   if (!pkgId) return;
-
-  const tx = db.transaction("packages", "readwrite");
-  tx.objectStore("packages").put({ id: pkgId, scannedAt: Date.now() });
-
-  if (pkgId.startsWith("PO")) {
-    const poTx = db.transaction("poBoxes", "readwrite");
-    poTx.objectStore("poBoxes").add({ packageId: pkgId, address: "Unassigned" });
-  }
-  alert("Package logged.");
+  const lastPoint = routePoints[routePoints.length - 1];
+  lastPoint.packages.push(pkgId);
+  drawRouteCanvas();
+  alert(`Package ${pkgId} assigned.`);
 }
 
-function poBoxAdmin() {
-  const tx = db.transaction("poBoxes", "readonly");
-  const store = tx.objectStore("poBoxes");
-  const req = store.getAll();
-  req.onsuccess = () => {
-    const entries = req.result;
-    let out = "";
-    entries.forEach(e => out += `ID:${e.id} Package:${e.packageId} Address:${e.address}\n`);
-    const selected = prompt(out + "\n\nEnter ID to Edit:");
-    if (!selected) return;
-
-    const newAddr = prompt("Enter new address:");
-    if (!newAddr) return;
-
-    const updateTx = db.transaction("poBoxes", "readwrite");
-    updateTx.objectStore("poBoxes").put({ id: parseInt(selected), packageId: entries.find(e=>e.id==selected).packageId, address: newAddr });
-    alert("PO Box updated.");
-  };
-}
-
-function hazardLog() {
-  const hazard = prompt("Enter hazard:");
-  const tx = db.transaction("hazards", "readwrite");
-  tx.objectStore("hazards").add({ note: hazard, timestamp: Date.now() });
-  alert("Hazard logged.");
-}
-
-// Simple canvas USPS route display:
-function drawRoute() {
+function exportAllData() {
   const tx = db.transaction("routes", "readonly");
   tx.objectStore("routes").getAll().onsuccess = e => {
-    e.target.result.forEach(drawPoint);
+    const exportData = { routes: e.target.result };
+    const blob = new Blob([JSON.stringify(exportData)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `usps-route-${Date.now()}.json`;
+    a.click();
   };
 }
 
-function drawPoint(p) {
+function importRouteFile(event) {
+  const file = event.target.files[0];
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = JSON.parse(e.target.result);
+    const tx = db.transaction("routes", "readwrite");
+    data.routes.forEach(p => tx.objectStore("routes").put(p));
+    alert("Import complete.");
+  };
+  reader.readAsText(file);
+}
+
+function supervisorDashboard() {
+  const total = routePoints.length;
+  let pkgs = 0;
+  routePoints.forEach(p => pkgs += p.packages.length);
+  alert(`Supervisor Summary:\nStops: ${total}\nPackages: ${pkgs}`);
+}
+
+function replayRoute() {
+  const tx = db.transaction("routes", "readonly");
+  tx.objectStore("routes").getAll().onsuccess = e => {
+    routePoints = e.target.result;
+    drawRouteCanvas();
+    alert("Route loaded.");
+  };
+}
+
+function drawRouteCanvas() {
   const canvas = document.getElementById("mapCanvas");
   const ctx = canvas.getContext("2d");
-  const x = (p.lon + 180) * 2;
-  const y = (90 - p.lat) * 2;
-  ctx.fillStyle = "red";
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(x, y, 3, 0, 2 * Math.PI);
-  ctx.fill();
-  async function exportAllData() {
-  const routeTx = db.transaction("routes", "readonly");
-  const routeStore = routeTx.objectStore("routes");
-  const routes = await routeStore.getAll();
+  routePoints.forEach((p, i) => {
+    const x = normalizeX(p.lon);
+    const y = normalizeY(p.lat);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+    ctx.fillStyle = "blue";
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, 2 * Math.PI);
+    ctx.fill();
+    if (p.packages.length > 0) {
+      ctx.fillStyle = "black";
+      ctx.fillText(`${p.packages.length} pkg`, x + 5, y - 5);
+    }
+  });
+  ctx.stroke();
+}
 
-  const packageTx = db.transaction("packages", "readonly");
-  const packageStore = packageTx.objectStore("packages");
-  const packages = await packageStore.getAll();
+function mapClickHandler(e) {
+  if (!editMode) return;
+  const canvas = document.getElementById("mapCanvas");
+  const rect = canvas.getBoundingClientRect();
+  const clickX = e.clientX - rect.left;
+  const clickY = e.clientY - rect.top;
+  for (let i = 0; i < routePoints.length; i++) {
+    const x = normalizeX(routePoints[i].lon);
+    const y = normalizeY(routePoints[i].lat);
+    if (Math.abs(x - clickX) < 10 && Math.abs(y - clickY) < 10) {
+      routePoints.splice(i, 1);
+      drawRouteCanvas();
+      return;
+    }
+  }
+  alert("To insert new point use future GPS-select build.");
+}
 
-  const poBoxTx = db.transaction("poBoxes", "readonly");
-  const poBoxStore = poBoxTx.objectStore("poBoxes");
-  const poBoxes = await poBoxStore.getAll();
-
-  const hazardTx = db.transaction("hazards", "readonly");
-  const hazardStore = hazardTx.objectStore("hazards");
-  const hazards = await hazardStore.getAll();
-
-  const exportData = {
-    timestamp: new Date().toISOString(),
-    routes,
-    packages,
-    poBoxes,
-    hazards
+function saveCorrectedRoute() {
+  const tx = db.transaction("routes", "readwrite");
+  const store = tx.objectStore("routes");
+  store.clear().onsuccess = () => {
+    routePoints.forEach(p => store.put(p));
+    alert("Route saved.");
   };
+}
 
-  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `usps-lot-route-${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+function startDeliveryMode() {
+  if (routePoints.length === 0) { alert("No route loaded."); return; }
+  let i = 0;
+  const nextStop = () => {
+    if (i >= routePoints.length) { alert("Route complete."); return; }
+    const stop = routePoints[i];
+    const pkgList = stop.packages.join(", ");
+    if (confirm(`Stop ${i + 1}/${routePoints.length}\nPackages: ${pkgList || "None"}\nDeliver?`)) {
+      i++;
+      nextStop();
+    }
+  };
+  nextStop();
 }
+
+function generateDailyReport() {
+  const stops = routePoints.length;
+  let pkgs = 0;
+  routePoints.forEach(p => pkgs += p.packages.length);
+  alert(`Daily Report:\nStops: ${stops}\nPackages: ${pkgs}`);
 }
+
+function normalizeX(lon) { return (lon + 180) * 2; }
+function normalizeY(lat) { return (90 - lat) * 2; }
