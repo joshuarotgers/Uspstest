@@ -1,19 +1,24 @@
 let db;
-let watchId;
 
-// Initialize IndexedDB on page load
 window.onload = () => {
-  const request = indexedDB.open("USPSNavDB", 1);
+  const request = indexedDB.open("USPSNavDB", 2);
   request.onupgradeneeded = e => {
     db = e.target.result;
-    db.createObjectStore("routes", { keyPath: "timestamp" });
+    if (!db.objectStoreNames.contains("routes"))
+      db.createObjectStore("routes", { keyPath: "timestamp" });
+    if (!db.objectStoreNames.contains("packages"))
+      db.createObjectStore("packages", { keyPath: "id" });
+    if (!db.objectStoreNames.contains("poBoxes"))
+      db.createObjectStore("poBoxes", { keyPath: "id", autoIncrement: true });
+    if (!db.objectStoreNames.contains("hazards"))
+      db.createObjectStore("hazards", { keyPath: "id", autoIncrement: true });
   };
   request.onsuccess = e => {
     db = e.target.result;
     console.log("Database Ready");
-    drawRoute();  // Draw any existing route on load
+    drawRoute();
   };
-  request.onerror = e => console.error("Database Error", e);
+  request.onerror = e => console.error("DB Error", e);
 
   document.getElementById("startRouteBtn").addEventListener("click", startRoute);
   document.getElementById("scanPackagesBtn").addEventListener("click", scanPackages);
@@ -28,60 +33,74 @@ function startRoute() {
   }
   alert("GPS tracking started.");
 
-  watchId = navigator.geolocation.watchPosition(pos => {
+  navigator.geolocation.watchPosition(pos => {
     const point = {
       lat: pos.coords.latitude,
       lon: pos.coords.longitude,
       timestamp: Date.now()
     };
-    saveRoutePoint(point);
+    const tx = db.transaction("routes", "readwrite");
+    tx.objectStore("routes").put(point);
     drawPoint(point);
-  }, err => console.error(err), { enableHighAccuracy: true });
+  });
 }
 
-function saveRoutePoint(point) {
-  const tx = db.transaction("routes", "readwrite");
-  const store = tx.objectStore("routes");
-  store.put(point);
+function scanPackages() {
+  const pkgId = prompt("Enter Package ID:");
+  if (!pkgId) return;
+
+  const tx = db.transaction("packages", "readwrite");
+  tx.objectStore("packages").put({ id: pkgId, scannedAt: Date.now() });
+
+  if (pkgId.startsWith("PO")) {
+    const poTx = db.transaction("poBoxes", "readwrite");
+    poTx.objectStore("poBoxes").add({ packageId: pkgId, address: "Unassigned" });
+  }
+  alert("Package logged.");
 }
 
-// Draw the full route on canvas
-function drawRoute() {
-  const tx = db.transaction("routes", "readonly");
-  const store = tx.objectStore("routes");
+function poBoxAdmin() {
+  const tx = db.transaction("poBoxes", "readonly");
+  const store = tx.objectStore("poBoxes");
   const req = store.getAll();
   req.onsuccess = () => {
-    const allPoints = req.result;
-    allPoints.forEach(drawPoint);
+    const entries = req.result;
+    let out = "";
+    entries.forEach(e => out += `ID:${e.id} Package:${e.packageId} Address:${e.address}\n`);
+    const selected = prompt(out + "\n\nEnter ID to Edit:");
+    if (!selected) return;
+
+    const newAddr = prompt("Enter new address:");
+    if (!newAddr) return;
+
+    const updateTx = db.transaction("poBoxes", "readwrite");
+    updateTx.objectStore("poBoxes").put({ id: parseInt(selected), packageId: entries.find(e=>e.id==selected).packageId, address: newAddr });
+    alert("PO Box updated.");
   };
 }
 
-// Simple canvas drawing logic (scaled for USPS demo mode)
-function drawPoint(point) {
+function hazardLog() {
+  const hazard = prompt("Enter hazard:");
+  const tx = db.transaction("hazards", "readwrite");
+  tx.objectStore("hazards").add({ note: hazard, timestamp: Date.now() });
+  alert("Hazard logged.");
+}
+
+// Simple canvas USPS route display:
+function drawRoute() {
+  const tx = db.transaction("routes", "readonly");
+  tx.objectStore("routes").getAll().onsuccess = e => {
+    e.target.result.forEach(drawPoint);
+  };
+}
+
+function drawPoint(p) {
   const canvas = document.getElementById("mapCanvas");
   const ctx = canvas.getContext("2d");
-
-  // Normalize lat/lon just for demo visual (not real-world map)
-  const x = (point.lon + 180) * 2;
-  const y = (90 - point.lat) * 2;
-
+  const x = (p.lon + 180) * 2;
+  const y = (90 - p.lat) * 2;
   ctx.fillStyle = "red";
   ctx.beginPath();
   ctx.arc(x, y, 3, 0, 2 * Math.PI);
   ctx.fill();
-}
-
-// Other USPS features stay the same (simulated for field test)
-function scanPackages() {
-  const pkgId = prompt("Simulated package scan: Enter package ID");
-  alert("Package logged: " + pkgId);
-}
-
-function poBoxAdmin() {
-  alert("PO Box admin log (future upgrade)");
-}
-
-function hazardLog() {
-  const hazard = prompt("Enter hazard notes:");
-  alert("Hazard logged: " + hazard);
 }
