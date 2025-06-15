@@ -104,4 +104,37 @@ function drawPoint(p) {
   ctx.beginPath();
   ctx.arc(x, y, 3, 0, 2 * Math.PI);
   ctx.fill();
+  async function exportAllData() {
+  const routeTx = db.transaction("routes", "readonly");
+  const routeStore = routeTx.objectStore("routes");
+  const routes = await routeStore.getAll();
+
+  const packageTx = db.transaction("packages", "readonly");
+  const packageStore = packageTx.objectStore("packages");
+  const packages = await packageStore.getAll();
+
+  const poBoxTx = db.transaction("poBoxes", "readonly");
+  const poBoxStore = poBoxTx.objectStore("poBoxes");
+  const poBoxes = await poBoxStore.getAll();
+
+  const hazardTx = db.transaction("hazards", "readonly");
+  const hazardStore = hazardTx.objectStore("hazards");
+  const hazards = await hazardStore.getAll();
+
+  const exportData = {
+    timestamp: new Date().toISOString(),
+    routes,
+    packages,
+    poBoxes,
+    hazards
+  };
+
+  const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `usps-lot-route-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 }
