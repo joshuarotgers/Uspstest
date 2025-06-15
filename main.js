@@ -24,6 +24,7 @@ window.onload = () => {
   document.getElementById("scanPackagesBtn").addEventListener("click", scanPackages);
   document.getElementById("poBoxAdminBtn").addEventListener("click", poBoxAdmin);
   document.getElementById("hazardLogBtn").addEventListener("click", hazardLog);
+  document.getElementById("exportDataBtn").addEventListener("click", exportAllData);
 };
 
 function startRoute() {
