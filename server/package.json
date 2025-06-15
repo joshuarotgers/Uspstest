@@ -1,7 +1,7 @@
 {
   "name": "usps-lot-nav-v11-server",
   "version": "1.0.0",
-  "description": "USPS LOT NAV V11 National Server (Secure)",
+  "description": "USPS LOT NAV V11 National Server (Atlas & GitHub Optimized)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
