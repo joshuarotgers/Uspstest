@@ -1,5 +1,5 @@
 let token = null;
-const serverURL = "http://localhost:4000"; // Update for production deployment
+const serverURL = "http://usps-server:4000"; // Update for production deployment
 
 window.onload = () => {
   document.getElementById("loginBtn").onclick = login;
