@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>USPS LOT NAV V11 - HQ Reporting</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <header><h1>USPS LOT NAV V11 HQ Reporting</h1></header>
+
+  <main id="loginView">
+    <h2>HQ Login</h2>
+    <input id="username" placeholder="Username" /><br/>
+    <input id="password" type="password" placeholder="Password" /><br/>
+    <button id="loginBtn">Login</button>
+    <p id="loginError"></p>
+  </main>
+
+  <main id="reportView" style="display:none;">
+    <h2>National LOT Analytics</h2>
+    <div id="summary"></div>
+    <button id="logoutBtn">Logout</button>
+  </main>
+
+  <footer><p>USPS LOT NAV V11 HQ Reporting © 2025</p></footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
