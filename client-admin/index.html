@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>USPS LOT NAV V11 - Admin Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <header><h1>USPS LOT NAV V11 - Admin Portal</h1></header>
+
+  <main id="loginView">
+    <h2>HQ Admin Login</h2>
+    <input id="username" placeholder="Username" /><br/>
+    <input id="password" type="password" placeholder="Password" /><br/>
+    <button id="loginBtn">Login</button>
+    <p id="loginError"></p>
+  </main>
+
+  <main id="adminView" style="display:none;">
+    <h2>Welcome, <span id="adminUser"></span></h2>
+
+    <div id="districtSection">
+      <h3>District Management</h3>
+      <input id="districtName" placeholder="District Name" />
+      <button id="createDistrictBtn">Create District</button>
+    </div>
+
+    <div id="userSection">
+      <h3>User Management</h3>
+      <input id="newUsername" placeholder="Username" />
+      <input id="newPassword" type="password" placeholder="Password" />
+      <input id="newDistrict" placeholder="District (exact)" />
+      <select id="newRole">
+        <option value="carrier">Carrier</option>
+        <option value="supervisor">Supervisor</option>
+        <option value="district-admin">District Admin</option>
+        <option value="hq">HQ Admin</option>
+      </select>
+      <button id="createUserBtn">Create User</button>
+    </div>
+
+    <div id="fileSection">
+      <h3>LOT File Listing</h3>
+      <button id="listFilesBtn">List All Files</button>
+      <div id="fileList"></div>
+    </div>
+
+    <button id="logoutBtn">Logout</button>
+  </main>
+
+  <footer><p>USPS LOT NAV V11 Admin Portal © 2025</p></footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
