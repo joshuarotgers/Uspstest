@@ -14,7 +14,7 @@ app.use(express.json());
 // Load secure JWT secret from file
 const jwtSecret = fs.readFileSync(process.env.JWT_SECRET_FILE, 'utf8');
 
-// Connect to MongoDB
+// MongoDB connection
 mongoose.connect(process.env.MONGO_URI);
 
 // Models
@@ -22,15 +22,16 @@ const User = require("./models/User");
 const District = require("./models/District");
 const LotFile = require("./models/LotFile");
 
-// Upload Storage
+// File upload storage config
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, "uploads/"),
   filename: (_, file, cb) => cb(null, Date.now() + "-" + file.originalname)
 });
 const upload = multer({ storage });
+
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 
-// Auth Middleware
+// Token middleware
 function verifyToken(req, res, next) {
   const token = req.headers["authorization"];
   if (!token) return res.sendStatus(401);
@@ -41,7 +42,7 @@ function verifyToken(req, res, next) {
   });
 }
 
-// TEMP USER REGISTRATION (For initial setup only)
+// TEMP registration route for HQ initial user creation
 app.post("/register", async (req, res) => {
   const hashed = await bcrypt.hash(req.body.password, 10);
   const user = new User({
@@ -54,7 +55,7 @@ app.post("/register", async (req, res) => {
   res.json({ message: "User registered" });
 });
 
-// District Creation (HQ Only)
+// District creation (HQ only)
 app.post("/district", verifyToken, async (req, res) => {
   if (req.user.role !== "hq") return res.sendStatus(403);
   const district = new District({ name: req.body.name });
@@ -62,7 +63,7 @@ app.post("/district", verifyToken, async (req, res) => {
   res.json({ message: "District created" });
 });
 
-// Login
+// Login route
 app.post("/login", async (req, res) => {
   const user = await User.findOne({ username: req.body.username });
   if (!user) return res.sendStatus(401);
@@ -76,7 +77,7 @@ app.post("/login", async (req, res) => {
   res.json({ token });
 });
 
-// Upload LOT File
+// LOT file upload route
 app.post("/upload", verifyToken, upload.single("lotFile"), async (req, res) => {
   const file = new LotFile({
     filename: req.file.filename,
@@ -89,7 +90,7 @@ app.post("/upload", verifyToken, upload.single("lotFile"), async (req, res) => {
   res.json({ message: "File uploaded" });
 });
 
-// List Files by District
+// LOT file list by district
 app.get("/files", verifyToken, async (req, res) => {
   let files;
   if (req.user.role === "hq") {
@@ -100,12 +101,12 @@ app.get("/files", verifyToken, async (req, res) => {
   res.json(files);
 });
 
-// File Download
+// LOT file download
 app.get("/download/:filename", verifyToken, (req, res) => {
   res.download(__dirname + "/uploads/" + req.params.filename);
 });
 
-// Reporting API (HQ Only)
+// HQ reporting endpoint
 app.get("/reporting/summary", verifyToken, async (req, res) => {
   if (req.user.role !== "hq") return res.sendStatus(403);
 
@@ -127,4 +128,5 @@ app.get("/reporting/summary", verifyToken, async (req, res) => {
   });
 });
 
+// Start the server
 app.listen(4000, () => console.log("USPS LOT NAV V11 Server running on port 4000"));
